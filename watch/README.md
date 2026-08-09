@@ -190,22 +190,41 @@ Investigation approfondie (simulateur, **confirmé fiable** — reproduit le cra
 Cause probable : dans ce SDK, `Graphics.FontType` est un typedef complexe
 (`WatchUi.FontResource or Graphics.FontDefinition or Graphics.FontReference or
 Graphics.VectorFont`, **pas** un simple entier) — le bytecode compilé pour `drawText`
-semble reposer sur un mécanisme de résolution de police que le firmware VA3 (device 2017)
-ne reconnaît pas. **Aucun contournement code trouvé malgré une investigation exhaustive.**
+semble reposer sur un mécanisme de résolution de police que le **profil de simulation**
+VA3 ne reconnaît pas.
 
-**IMPORTANT** : comme le crash `ActivityRecording` (point 1) survient **avant** tout appel
-à `drawText` dans le flux réel de l'app, il est très probable qu'**Alexis n'ait jamais
-atteint ce second bug** lors du premier test hardware — le crash "IQ!" observé s'explique
-entièrement par le point 1. **Le nouveau build (avec le fix #1) doit être re-testé sur la
-montre en premier** : s'il tourne, ce point 2 ne bloque rien en pratique ; s'il replante,
-ce sera la confirmation que ce bug de police touche aussi le matériel réel, et il faudra
-soit chercher un contournement (ex. rendu via un `Drawable`/layout XML `WatchUi.Text`
-plutôt que `Dc.drawText` direct, piste non testée faute de temps), soit remonter aux
-forums développeurs Garmin / support.
+**CONFIRMÉ SUR MATÉRIEL RÉEL (build 23e59ba) : ce bug #2 n'affecte PAS la vraie montre.**
+L'app démarre et déroule le flux de bout en bout sur la Vivoactive 3 physique d'Alexis
+(chargement, tactile, navigation). C'était bien un artefact du simulateur uniquement — le
+crash "IQ!" initial était entièrement causé par le bug #1 (`ActivityRecording`), qui
+intervenait plus tôt dans le flux et empêchait d'atteindre le premier `drawText`. Pas de
+contournement nécessaire, aucune action de suivi sur ce point.
 
-`bin/muscu.prg` est rebuildé (mode *release*, avec le fix #1, `useMock = true` par défaut
-dans `resources/properties/properties.xml`) : le test sur la montre déroule une séance
-complète **sans dépendre de l'API ni du téléphone** (workout mock "Push A", repos courts).
+### 3. Bouton physique qui sort de l'app malgré `onBack()` — EN COURS
+
+Sur le simulateur, surcharger `onBack()` (BehaviorDelegate) suffit à intercepter le bouton
+latéral. **Sur le vrai matériel (confirmé en test terrain), ce n'est pas suffisant** :
+l'appui sur le bouton fait quand même sortir de l'app vers l'écran principal de la montre,
+alors qu'`onBack()` est bien surchargé et retourne `true`.
+
+**Fix appliqué** (`ExerciseDelegate`/`RestDelegate`) : double filet — en plus de `onBack()`,
+surcharge de `onKey(evt)` interceptant explicitement `KEY_ESC`/`KEY_ENTER`/`KEY_START` (les
+trois événements possibles selon la façon dont le firmware VA3 remonte l'appui), chacun
+retournant `true` pour consommer l'événement. Le simulateur ne reflétant pas fidèlement le
+comportement du bouton physique réel (déjà vu pour les bugs #1 et #2 ci-dessus), ce
+correctif couvre les deux mécanismes plutôt que de parier sur un seul — **à valider sur la
+montre physique**, le simulateur ne permettant pas de le confirmer.
+
+⚠️ **Limite connue, pas un bug** : un **appui long** sur le bouton latéral déclenche le
+menu système de la montre (settings/power), un comportement **géré par le firmware avant
+même que l'app ne reçoive l'événement** — aucun delegate ne peut l'intercepter. Le
+correctif ci-dessus cible uniquement l'**appui court**, qui est le seul évènement
+transmis à l'application.
+
+`bin/muscu.prg` est rebuildé (mode *release*, avec les fix #1 et #3, `useMock = true` par
+défaut dans `resources/properties/properties.xml`) : le test sur la montre déroule une
+séance complète **sans dépendre de l'API ni du téléphone** (workout mock "Push A", repos
+courts).
 
 ---
 
@@ -318,30 +337,24 @@ le bouton retour quitte proprement l'app.
 
 ---
 
-## Spike ergonomique : 1 bouton + tactile (à valider tôt dans le sim)
+## Spike ergonomique : 1 bouton + tactile
 
-La VA3 n'a **pas** de bouton back/lap. Choix retenus, **à confirmer sur simulateur** :
+La VA3 n'a **pas** de bouton back/lap, un seul bouton latéral. Choix retenus :
 
 - **Action principale = tactile** (gros bouton « SÉRIE TERMINÉE »), pas le bouton
   physique → évite les validations accidentelles et reste lisible en effort.
-- **Bouton physique réservé au repos** (pause/reprise) : moment où on n'a pas forcément
-  envie de viser l'écran, doigts moites/gants.
+- **Bouton physique = validation de la série** (écran exercice) et **pause/reprise du
+  repos** (écran repos) : piloter la séance au bouton sans avoir à regarder/viser
+  l'écran (doigts moites, gants, effort).
 - **Skip du repos = tactile** (« PASSER ») pour ne pas surcharger le bouton unique.
-- Sur l'écran exercice, le bouton physique **quitte l'app** (comportement back natif
-  VA3). ⚠️ **Point à valider** : risque de sortie involontaire en pleine séance —
-  si confirmé, envisager une confirmation « quitter la séance ? ».
-- `onKey` gère `KEY_ENTER/KEY_START/KEY_ESC` car le mapping du bouton unique VA3 en
-  contexte activité **doit être vérifié dans le simulateur** (d'où le spike).
 
-> **À remonter après test sim** : mapping réel du bouton physique VA3, confort du repos
-> auto, taille/zone du bouton tactile sur écran rond, et le risque de sortie involontaire.
-
-**Correction appliquée suite à revue** : le bouton latéral VA3 remonte en réalité un
-événement **back** (`KEY_ESC` / `onBack`), jamais `ENTER`/`START`. `ExerciseDelegate` et
-`RestDelegate` étendent désormais `WatchUi.BehaviorDelegate` et surchargent `onBack()` :
-sur l'écran exercice il valide la série (comme le gros bouton tactile), sur l'écran repos
-il bascule pause/reprise. Sans ce fix, le bouton physique fermait l'app en pleine séance
-(comportement `onBack` par défaut = sortie).
+**État validé sur matériel réel** (build 23e59ba, cf. section "Incompatibilités d'API"
+ci-dessus point #3) :`ExerciseDelegate`/`RestDelegate` étendent `WatchUi.BehaviorDelegate`
+et surchargent **à la fois** `onBack()` et `onKey()` (`KEY_ESC`/`KEY_ENTER`/`KEY_START`) —
+double filet nécessaire car le simulateur et le matériel réel ne remontent pas
+l'appui du bouton de la même façon (onBack seul suffit en simulateur, pas confirmé sur la
+vraie montre). Un appui **long** déclenche le menu système (non interceptable par l'app,
+géré au niveau firmware) — limite acceptée, pas un bug.
 
 ## Résilience réseau
 

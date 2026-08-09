@@ -78,10 +78,14 @@ class ExerciseView extends WatchUi.View {
 
 // Entrees de l'ecran exercice : tap sur le gros bouton OU bouton physique = serie terminee.
 //
-// IMPORTANT (VA3) : le bouton lateral remonte un evenement "back" (KEY_ESC),
-// jamais ENTER/START. Un InputDelegate.onKey ne consomme PAS cet evenement :
-// le comportement par defaut ferme l'app en pleine serie. Il faut donc etendre
-// BehaviorDelegate et surcharger onBack() pour intercepter ce cas.
+// IMPORTANT (VA3) : sur le SIMULATEUR le bouton lateral remonte onBack() et le
+// surcharger suffit a le consommer. Sur le VRAI MATERIEL (confirme en test
+// terrain), onBack() n'est PAS toujours consomme par le framework et l'appui
+// ressort quand meme vers l'app systeme -> on surcharge AUSSI onKey() pour
+// intercepter KEY_ESC/KEY_ENTER/KEY_START directement, en plus de onBack().
+// Double filet volontaire : le simulateur ne reflete pas fidelement ce que
+// remonte le bouton physique reel, donc on couvre les deux mecanismes plutot
+// que de parier sur un seul.
 class ExerciseDelegate extends WatchUi.BehaviorDelegate {
     private var _c as SessionController;
     private var _done as Lang.Boolean;   // garde d'idempotence (evite double completeSet)
@@ -105,6 +109,16 @@ class ExerciseDelegate extends WatchUi.BehaviorDelegate {
     function onBack() as Lang.Boolean {
         completeSet();
         return true;
+    }
+
+    // Filet de secours si le framework ne route pas le bouton via onBack().
+    function onKey(evt as WatchUi.KeyEvent) as Lang.Boolean {
+        var k = evt.getKey();
+        if (k == WatchUi.KEY_ESC || k == WatchUi.KEY_ENTER || k == WatchUi.KEY_START) {
+            completeSet();
+            return true;
+        }
+        return false;
     }
 
     private function completeSet() as Void {
