@@ -1,19 +1,38 @@
-# deps & builds
+# --- deps & builds ---
 node_modules/
 dist/
+build/
 
-# données locales
+# --- secrets ---
+.env
+.env.*
+!.env.example
+
+# --- bases de données locales ---
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 web/data/
+
+# --- dataset d'exercices (~300 Mo de médias, regénérable via git clone + npm run import) ---
 web/dataset/
 
-# secrets
-.env
+# --- artefacts Connect IQ (watch/) ---
+watch/bin/
+watch/bin-*
+*.prg
+*.iq
+*.debug.xml
+developer_key
 
-# divers
+# --- divers ---
 *.log
 .DS_Store
 
-# outillage local des agents IA
+# --- outillage local des agents IA ---
 .agents/
 .aionrs/
 .claude/
