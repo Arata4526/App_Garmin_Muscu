@@ -2,8 +2,13 @@ using Toybox.Communications;
 using Toybox.Application;
 using Toybox.Application.Properties;
 using Toybox.Application.Storage;
+using Toybox.PersistedContent;
 using Toybox.Lang;
 using Toybox.System;
+
+// Signature exacte attendue par Communications.makeWebRequest pour son callback.
+typedef WebCallback as Method(code as Lang.Number,
+    data as Null or Lang.Dictionary or Lang.String or PersistedContent.Iterator) as Void;
 
 // Acces aux donnees : chargement du workout (mock ou API) et envoi des resultats.
 //
@@ -15,7 +20,12 @@ using Toybox.System;
 class WorkoutRepository {
     private const PENDING_KEY = "pendingSessions";
 
-    // callback(model as WorkoutModel, errMsg as String or null)
+    private var _loadCb as Lang.Method or Null;
+    private var _postCb as Lang.Method or Null;
+    private var _lastAttemptBody as Lang.Dictionary or Null;
+    private var _flushQueue as Lang.Array = [];
+
+    // callback(model as WorkoutModel or Null, errMsg as String or Null)
     function loadWorkout(callback as Lang.Method) as Void {
         _loadCb = callback;
 
@@ -38,18 +48,20 @@ class WorkoutRepository {
             :headers => authHeaders(),
             :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
         };
-        Communications.makeWebRequest(url, null, options, method(:onWorkoutResponse));
+        Communications.makeWebRequest(url, null, options, method(:onWorkoutResponse) as WebCallback);
     }
 
     // data peut ne pas etre un Dictionary (reponse non-JSON, erreur reseau, etc.) :
     // on ne suppose jamais sa forme avant de l'avoir verifiee.
-    function onWorkoutResponse(code as Lang.Number, data) as Void {
+    function onWorkoutResponse(code as Lang.Number,
+            data as Null or Lang.Dictionary or Lang.String or PersistedContent.Iterator) as Void {
+        var cb = _loadCb as Lang.Method;
         if (code == 200 && data instanceof Lang.Dictionary) {
             var model = WorkoutModel.fromJson(data as Lang.Dictionary);
-            _loadCb.invoke(model, model == null ? "Reponse invalide" : null);
+            cb.invoke(model, model == null ? "Reponse invalide" : null);
         } else {
             System.println("GET workout HTTP " + code);
-            _loadCb.invoke(null, "HTTP " + code);
+            cb.invoke(null, "HTTP " + code);
         }
     }
 
@@ -66,16 +78,17 @@ class WorkoutRepository {
             return;
         }
 
-        sendSession(body, method(:onPostResponse));
+        sendSession(body, method(:onPostResponse) as WebCallback);
     }
 
-    function onPostResponse(code as Lang.Number, data) as Void {
+    function onPostResponse(code as Lang.Number,
+            data as Null or Lang.Dictionary or Lang.String or PersistedContent.Iterator) as Void {
         var ok = (code >= 200 && code < 300);
         System.println("POST session HTTP " + code);
         if (!ok) {
             enqueuePending(_lastAttemptBody);
         }
-        _postCb.invoke(ok, code);
+        (_postCb as Lang.Method).invoke(ok, code);
     }
 
     // A appeler au demarrage de l'app (avant/independamment du chargement du
@@ -100,10 +113,11 @@ class WorkoutRepository {
         // le callback de maniere synchrone (ex. apiBaseUrl vide), et
         // onFlushResponse doit alors trouver _flushQueue deja a jour.
         _flushQueue = pending;
-        sendSession(body, method(:onFlushResponse));
+        sendSession(body, method(:onFlushResponse) as WebCallback);
     }
 
-    function onFlushResponse(code as Lang.Number, data) as Void {
+    function onFlushResponse(code as Lang.Number,
+            data as Null or Lang.Dictionary or Lang.String or PersistedContent.Iterator) as Void {
         var ok = (code >= 200 && code < 300);
         var remaining = _flushQueue;
         if (ok && remaining.size() > 0) {
@@ -122,10 +136,7 @@ class WorkoutRepository {
 
     // --- helpers reseau ---
 
-    private var _lastAttemptBody as Lang.Dictionary;
-    private var _flushQueue as Lang.Array = [];
-
-    private function sendSession(body as Lang.Dictionary, callback as Lang.Method) as Void {
+    private function sendSession(body as Lang.Dictionary, callback as WebCallback) as Void {
         _lastAttemptBody = body;
         var base = getStr("apiBaseUrl", "");
         if (base.length() == 0) {
@@ -158,7 +169,7 @@ class WorkoutRepository {
         }
     }
 
-    private function enqueuePending(body as Lang.Dictionary) as Void {
+    private function enqueuePending(body as Lang.Dictionary or Null) as Void {
         if (body == null) { return; }
         var list = getPending();
         list.add(body);
@@ -167,9 +178,6 @@ class WorkoutRepository {
     }
 
     // --- helpers generaux ---
-
-    private var _loadCb as Lang.Method;
-    private var _postCb as Lang.Method;
 
     private function authHeaders() as Lang.Dictionary {
         var token = getStr("token", "");

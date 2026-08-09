@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { api, getToken, setToken } from './api.js'
+import Icon from './components/Icon.jsx'
 import Exercises from './pages/Exercises.jsx'
 import Workouts from './pages/Workouts.jsx'
 import WorkoutEditor from './pages/WorkoutEditor.jsx'
@@ -17,8 +18,11 @@ function TokenGate ({ onSave }) {
   return (
     <div className="token-gate">
       <form onSubmit={(e) => { e.preventDefault(); if (value.trim()) onSave(value.trim()) }}>
-        <h1>🏋️ Muscu</h1>
-        <p>Entre le token API (variable <code>API_TOKEN</code> du serveur) :</p>
+        <span className="brand">
+          <span className="brand-icon"><Icon name="dumbbell" size={20} /></span>
+          Muscu
+        </span>
+        <p>Entre le token API pour te connecter<br />(variable <code>API_TOKEN</code> du serveur)</p>
         <input
           type="password"
           value={value}
@@ -26,7 +30,7 @@ function TokenGate ({ onSave }) {
           placeholder="Token"
           autoFocus
         />
-        <button type="submit">Valider</button>
+        <button className="btn primary" type="submit">Entrer</button>
       </form>
     </div>
   )
@@ -62,13 +66,18 @@ export default function App () {
   return (
     <CatalogContext.Provider value={{ catalog, loading, error }}>
       <header className="topbar">
-        <span className="brand">🏋️ Muscu</span>
-        <nav>
-          <NavLink to="/exercises">Exercices</NavLink>
-          <NavLink to="/workouts">Séances</NavLink>
-          <NavLink to="/progress">Progression</NavLink>
+        <span className="brand">
+          <span className="brand-icon"><Icon name="dumbbell" size={20} /></span>
+          Muscu
+        </span>
+        <nav className="mainnav">
+          <NavLink to="/exercises"><Icon name="dumbbell" />Exercices</NavLink>
+          <NavLink to="/workouts"><Icon name="clipboard" />Séances</NavLink>
+          <NavLink to="/progress"><Icon name="chart" />Progression</NavLink>
         </nav>
-        <button className="link" onClick={logout} title="Changer de token">⏻</button>
+        <button className="icon-btn" onClick={logout} title="Changer de token" aria-label="Changer de token">
+          <Icon name="logout" />
+        </button>
       </header>
       <main>
         {error && <div className="banner error">Erreur API : {error}</div>}

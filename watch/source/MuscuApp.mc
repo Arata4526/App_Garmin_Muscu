@@ -8,7 +8,7 @@ class MuscuApp extends Application.AppBase {
 
     var repo as WorkoutRepository;
     var recorder as SessionRecorder;
-    var controller as SessionController;   // null tant que le workout n'est pas charge
+    var controller as SessionController or Null;   // null tant que le workout n'est pas charge
     private var _loadStarted as Lang.Boolean;
 
     function initialize() {
@@ -40,13 +40,13 @@ class MuscuApp extends Application.AppBase {
     }
 
     // Ecran initial : chargement.
-    function getInitialView() as Lang.Array {
+    function getInitialView() as [WatchUi.Views] or [WatchUi.Views, WatchUi.InputDelegates] {
         var v = new LoadingView(null);
-        return [v, new SimpleExitDelegate()] as Lang.Array;
+        return [v, new SimpleExitDelegate()];
     }
 
     // Callback du chargement du workout.
-    function onWorkoutLoaded(model as WorkoutModel, err as Lang.String) as Void {
+    function onWorkoutLoaded(model as WorkoutModel or Null, err as Lang.String or Null) as Void {
         if (model == null || err != null) {
             WatchUi.switchToView(new LoadingView(err == null ? "Erreur" : err),
                                  new SimpleExitDelegate(), WatchUi.SLIDE_IMMEDIATE);
@@ -59,24 +59,28 @@ class MuscuApp extends Application.AppBase {
     }
 
     // --- Navigation ---
+    // controller est garanti non-null a partir d'ici : ces methodes ne sont
+    // appelees qu'une fois la seance demarree (onWorkoutLoaded l'a instancie).
 
-    function showExercise(transition as Lang.Number) as Void {
-        WatchUi.switchToView(new ExerciseView(controller),
-                             new ExerciseDelegate(controller), transition);
+    function showExercise(transition as WatchUi.SlideType) as Void {
+        var c = controller as SessionController;
+        WatchUi.switchToView(new ExerciseView(c), new ExerciseDelegate(c), transition);
     }
 
     function showRest(durationSec as Lang.Number) as Void {
-        var rv = new RestView(controller, durationSec);
+        var c = controller as SessionController;
+        var rv = new RestView(c, durationSec);
         WatchUi.switchToView(rv, new RestDelegate(rv), WatchUi.SLIDE_UP);
     }
 
     // Fin de seance : arret + sauvegarde FIT, puis POST des resultats.
     function finishWorkout() as Void {
+        var c = controller as SessionController;
         recorder.finishAndSave();
         var summary = new SummaryView();
         WatchUi.switchToView(summary, new SimpleExitDelegate(), WatchUi.SLIDE_LEFT);
         WatchUi.requestUpdate();
-        repo.postSession(controller.toSessionBody(), summary.method(:onPosted));
+        repo.postSession(c.toSessionBody(), summary.method(:onPosted));
     }
 }
 

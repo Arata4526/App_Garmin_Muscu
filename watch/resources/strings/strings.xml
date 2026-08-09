@@ -3,11 +3,8 @@
 
     <!-- App Settings (editables dans le simulateur / Garmin Connect Mobile) -->
     <string id="apiBaseUrlTitle">URL de l'API</string>
-    <string id="apiBaseUrlPrompt">Ex: https://muscu.alexisbousquet.fr</string>
     <string id="tokenTitle">Token (Bearer)</string>
-    <string id="tokenPrompt">Jeton d'authentification</string>
     <string id="workoutIdTitle">ID du workout</string>
-    <string id="workoutIdPrompt">Identifiant de la seance a charger</string>
     <string id="useMockTitle">Utiliser le mock local</string>
 
     <!-- UI -->

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useCatalog } from '../App.jsx'
+import Icon from './Icon.jsx'
 
 /** Champ de recherche d'exercice ; onPick(exercise) au clic sur un résultat. */
 export default function ExercisePicker ({ onPick, placeholder = 'Rechercher un exercice…' }) {
@@ -20,6 +21,7 @@ export default function ExercisePicker ({ onPick, placeholder = 'Rechercher un e
 
   return (
     <div className="exercise-picker">
+      <span className="picker-icon"><Icon name="search" size={18} /></span>
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}

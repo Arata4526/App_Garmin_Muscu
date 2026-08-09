@@ -51,7 +51,7 @@ class WorkoutModel {
     // Parsing defensif : toute structure inattendue (champ manquant, mauvais
     // type, reponse 200 malformee) est ignoree/sautee plutot que de crasher ;
     // renvoie null si le workout final n'a aucun exercice exploitable.
-    static function fromJson(data) as WorkoutModel {
+    static function fromJson(data) as WorkoutModel or Null {
         if (!(data instanceof Lang.Dictionary)) { return null; }
         var dict = data as Lang.Dictionary;
 

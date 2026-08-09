@@ -1,12 +1,12 @@
 <settings>
     <setting propertyKey="@Properties.apiBaseUrl" title="@Strings.apiBaseUrlTitle">
-        <settingConfig type="alphaNumeric" prompt="@Strings.apiBaseUrlPrompt"/>
+        <settingConfig type="alphaNumeric"/>
     </setting>
     <setting propertyKey="@Properties.token" title="@Strings.tokenTitle">
-        <settingConfig type="alphaNumeric" prompt="@Strings.tokenPrompt"/>
+        <settingConfig type="alphaNumeric"/>
     </setting>
     <setting propertyKey="@Properties.workoutId" title="@Strings.workoutIdTitle">
-        <settingConfig type="alphaNumeric" prompt="@Strings.workoutIdPrompt"/>
+        <settingConfig type="alphaNumeric"/>
     </setting>
     <setting propertyKey="@Properties.useMock" title="@Strings.useMockTitle">
         <settingConfig type="boolean"/>

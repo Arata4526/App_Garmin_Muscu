@@ -18,9 +18,14 @@ class SessionRecorder {
 
     function start(name as Lang.String) as Void {
         if (!available() || _session != null) { return; }
+        // NOTE: Activity.SPORT_TRAINING est documente et compile, mais son
+        // symbole n'est pas resolu par le runtime simulateur vivoactive3
+        // (decalage doc API vs profil figé du device). SPORT_GENERIC +
+        // SUB_SPORT_STRENGTH_TRAINING est la combinaison qui fonctionne et
+        // reste classee "Musculation" dans Garmin Connect via le sous-sport.
         _session = ActivityRecording.createSession({
             :name => name,
-            :sport => Activity.SPORT_TRAINING,
+            :sport => Activity.SPORT_GENERIC,
             :subSport => Activity.SUB_SPORT_STRENGTH_TRAINING
         });
         _session.start();
