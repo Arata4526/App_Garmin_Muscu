@@ -76,13 +76,20 @@ class ExerciseView extends WatchUi.View {
     }
 }
 
-// Entrees de l'ecran exercice : tap sur le gros bouton = serie terminee.
-class ExerciseDelegate extends WatchUi.InputDelegate {
+// Entrees de l'ecran exercice : tap sur le gros bouton OU bouton physique = serie terminee.
+//
+// IMPORTANT (VA3) : le bouton lateral remonte un evenement "back" (KEY_ESC),
+// jamais ENTER/START. Un InputDelegate.onKey ne consomme PAS cet evenement :
+// le comportement par defaut ferme l'app en pleine serie. Il faut donc etendre
+// BehaviorDelegate et surcharger onBack() pour intercepter ce cas.
+class ExerciseDelegate extends WatchUi.BehaviorDelegate {
     private var _c as SessionController;
+    private var _done as Lang.Boolean;   // garde d'idempotence (evite double completeSet)
 
     function initialize(controller as SessionController) {
-        InputDelegate.initialize();
+        BehaviorDelegate.initialize();
         _c = controller;
+        _done = false;
     }
 
     function onTap(evt as WatchUi.ClickEvent) as Lang.Boolean {
@@ -94,17 +101,16 @@ class ExerciseDelegate extends WatchUi.InputDelegate {
         return false;
     }
 
-    // Bouton physique sur cet ecran = valider la serie (fallback ergonomique).
-    function onKey(evt as WatchUi.KeyEvent) as Lang.Boolean {
-        var k = evt.getKey();
-        if (k == WatchUi.KEY_ENTER || k == WatchUi.KEY_START) {
-            completeSet();
-            return true;
-        }
-        return false;
+    // Bouton physique = valider la serie (au lieu de fermer l'app via le back par defaut).
+    function onBack() as Lang.Boolean {
+        completeSet();
+        return true;
     }
 
     private function completeSet() as Void {
+        if (_done) { return; }
+        _done = true;
+
         var st = _c.currentSet();
         // MVP : reps/charge reels = cibles.
         _c.completeCurrentSet(st.reps, st.weight);

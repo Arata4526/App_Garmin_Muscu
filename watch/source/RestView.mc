@@ -135,21 +135,22 @@ class RestView extends WatchUi.View {
 }
 
 // Entrees de l'ecran repos : bouton physique = pause/reprise, tap "PASSER" = skip.
-class RestDelegate extends WatchUi.InputDelegate {
+//
+// IMPORTANT (VA3) : le bouton lateral remonte un evenement "back" (KEY_ESC), pas
+// ENTER/START. Sans surcharge de onBack(), le comportement par defaut de
+// InputDelegate fermerait l'app pendant le repos (perte de la seance + du FIT
+// en cours). BehaviorDelegate + onBack() intercepte ce cas.
+class RestDelegate extends WatchUi.BehaviorDelegate {
     private var _view as RestView;
 
     function initialize(view as RestView) {
-        InputDelegate.initialize();
+        BehaviorDelegate.initialize();
         _view = view;
     }
 
-    function onKey(evt as WatchUi.KeyEvent) as Lang.Boolean {
-        var k = evt.getKey();
-        if (k == WatchUi.KEY_ENTER || k == WatchUi.KEY_START || k == WatchUi.KEY_ESC) {
-            _view.togglePause();
-            return true;
-        }
-        return false;
+    function onBack() as Lang.Boolean {
+        _view.togglePause();
+        return true;
     }
 
     function onTap(evt as WatchUi.ClickEvent) as Lang.Boolean {

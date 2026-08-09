@@ -11,7 +11,7 @@ module MockData {
             "name" => "Push A",
             "exercises" => [
                 {
-                    "exercise_id" => 101,
+                    "exercise_id" => "0101",
                     "name" => "Developpe couche",
                     "sets" => [
                         { "reps" => 10, "weight" => 40.0, "rest" => 12 },
@@ -20,7 +20,7 @@ module MockData {
                     ]
                 },
                 {
-                    "exercise_id" => 102,
+                    "exercise_id" => "0102",
                     "name" => "Developpe militaire",
                     "sets" => [
                         { "reps" => 10, "weight" => 25.0, "rest" => 10 },
@@ -28,7 +28,7 @@ module MockData {
                     ]
                 },
                 {
-                    "exercise_id" => 103,
+                    "exercise_id" => "0103",
                     "name" => "Dips",
                     "sets" => [
                         { "reps" => 12, "weight" => 0.0, "rest" => 10 },

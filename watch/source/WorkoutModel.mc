@@ -1,4 +1,5 @@
 using Toybox.Lang;
+using Toybox.System;
 
 // Modele de donnees de la seance + journal des resultats reels.
 // Conforme au contrat d'API (FIGE) :
@@ -20,12 +21,14 @@ class SetTarget {
 }
 
 // Un exercice = un nom + une liste de series cibles.
+// exerciseId est une STRING cote API reelle (ex. "0025") : on ne le convertit
+// jamais en nombre, on le transporte tel quel du GET vers le POST.
 class ExerciseDef {
-    var exerciseId as Lang.Number;
+    var exerciseId as Lang.String;
     var name as Lang.String;
     var sets as Lang.Array<SetTarget>;
 
-    function initialize(exerciseId as Lang.Number, name as Lang.String, sets as Lang.Array<SetTarget>) {
+    function initialize(exerciseId as Lang.String, name as Lang.String, sets as Lang.Array<SetTarget>) {
         me.exerciseId = exerciseId;
         me.name = name;
         me.sets = sets;
@@ -44,44 +47,62 @@ class WorkoutModel {
         me.exercises = exercises;
     }
 
-    // Construit un WorkoutModel a partir d'un dictionnaire JSON (mock ou reponse API).
-    // Renvoie null si la structure est invalide.
-    static function fromJson(data as Lang.Dictionary) as WorkoutModel {
-        if (data == null) { return null; }
-        var exObj = data.get("exercises");
-        if (!(exObj instanceof Lang.Array)) { return null; }
-        var exJson = exObj as Lang.Array;
+    // Construit un WorkoutModel a partir d'une reponse JSON (mock ou API).
+    // Parsing defensif : toute structure inattendue (champ manquant, mauvais
+    // type, reponse 200 malformee) est ignoree/sautee plutot que de crasher ;
+    // renvoie null si le workout final n'a aucun exercice exploitable.
+    static function fromJson(data) as WorkoutModel {
+        if (!(data instanceof Lang.Dictionary)) { return null; }
+        var dict = data as Lang.Dictionary;
 
-        var exercises = [] as Lang.Array<ExerciseDef>;
-        for (var e = 0; e < exJson.size(); e++) {
-            var ex = exJson[e] as Lang.Dictionary;
-            var setsObj = ex.get("sets");
-            var sets = [] as Lang.Array<SetTarget>;
-            if (setsObj instanceof Lang.Array) {
-                var setsJson = setsObj as Lang.Array;
-                for (var s = 0; s < setsJson.size(); s++) {
-                    var st = setsJson[s] as Lang.Dictionary;
-                    sets.add(new SetTarget(
-                        toNum(st.get("reps"), 0),
-                        toFloat(st.get("weight"), 0.0),
-                        toNum(st.get("rest"), 0)
-                    ));
+        try {
+            var exObj = dict.get("exercises");
+            if (!(exObj instanceof Lang.Array)) { return null; }
+            var exJson = exObj as Lang.Array;
+
+            var exercises = [] as Lang.Array<ExerciseDef>;
+            for (var e = 0; e < exJson.size(); e++) {
+                var exObjItem = exJson[e];
+                if (!(exObjItem instanceof Lang.Dictionary)) { continue; }
+                var ex = exObjItem as Lang.Dictionary;
+
+                var sets = [] as Lang.Array<SetTarget>;
+                var setsObj = ex.get("sets");
+                if (setsObj instanceof Lang.Array) {
+                    var setsJson = setsObj as Lang.Array;
+                    for (var s = 0; s < setsJson.size(); s++) {
+                        var stObj = setsJson[s];
+                        if (!(stObj instanceof Lang.Dictionary)) { continue; }
+                        var st = stObj as Lang.Dictionary;
+                        sets.add(new SetTarget(
+                            toNum(st.get("reps"), 0),
+                            toFloat(st.get("weight"), 0.0),
+                            toNum(st.get("rest"), 0)
+                        ));
+                    }
                 }
-            }
-            var exName = ex.get("name");
-            exercises.add(new ExerciseDef(
-                toNum(ex.get("exercise_id"), 0),
-                (exName == null) ? "?" : exName.toString(),
-                sets
-            ));
-        }
+                if (sets.size() == 0) { continue; }   // exercice inexploitable sans serie
 
-        var wName = data.get("name");
-        return new WorkoutModel(
-            toNum(data.get("id"), 0),
-            (wName == null) ? "Seance" : wName.toString(),
-            exercises
-        );
+                var exName = ex.get("name");
+                var exId = ex.get("exercise_id");
+                exercises.add(new ExerciseDef(
+                    (exId == null) ? "" : exId.toString(),
+                    (exName == null) ? "?" : exName.toString(),
+                    sets
+                ));
+            }
+            if (exercises.size() == 0) { return null; }
+
+            var wName = dict.get("name");
+            return new WorkoutModel(
+                toNum(dict.get("id"), 0),
+                (wName == null) ? "Seance" : wName.toString(),
+                exercises
+            );
+        } catch (ex) {
+            System.println("WorkoutModel.fromJson: parse error " + ex.getErrorMessage());
+            return null;
+        }
     }
 
     static function toNum(v, dflt as Lang.Number) as Lang.Number {

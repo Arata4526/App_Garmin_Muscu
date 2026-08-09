@@ -27,6 +27,10 @@ class MuscuApp extends Application.AppBase {
     function startLoadingIfNeeded() as Void {
         if (_loadStarted) { return; }
         _loadStarted = true;
+        // Retente d'abord d'envoyer toute session restee en file suite a un
+        // echec POST precedent (montre hors reseau apres une seance) ; best
+        // effort, ne bloque pas le chargement du nouveau workout.
+        repo.flushPendingSessions();
         repo.loadWorkout(method(:onWorkoutLoaded));
     }
 

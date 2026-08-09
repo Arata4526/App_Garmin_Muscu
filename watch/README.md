@@ -160,3 +160,21 @@ La VA3 n'a **pas** de bouton back/lap. Choix retenus, **à confirmer sur simulat
 
 > **À remonter après test sim** : mapping réel du bouton physique VA3, confort du repos
 > auto, taille/zone du bouton tactile sur écran rond, et le risque de sortie involontaire.
+
+**Correction appliquée suite à revue** : le bouton latéral VA3 remonte en réalité un
+événement **back** (`KEY_ESC` / `onBack`), jamais `ENTER`/`START`. `ExerciseDelegate` et
+`RestDelegate` étendent désormais `WatchUi.BehaviorDelegate` et surchargent `onBack()` :
+sur l'écran exercice il valide la série (comme le gros bouton tactile), sur l'écran repos
+il bascule pause/reprise. Sans ce fix, le bouton physique fermait l'app en pleine séance
+(comportement `onBack` par défaut = sortie).
+
+## Résilience réseau
+
+- **Parsing défensif** (`WorkoutModel.fromJson`) : toute structure JSON inattendue (champ
+  manquant, mauvais type, réponse 200 malformée) est ignorée entrée par entrée plutôt que
+  de crasher l'app ; le tout est en plus enveloppé dans un `try/catch`.
+- **File d'attente offline** (`WorkoutRepository`) : si `POST /api/sessions` échoue (montre
+  hors réseau juste après la séance, cas fréquent), le body est conservé dans
+  `Application.Storage` (persiste entre lancements) et renvoyé automatiquement au
+  prochain démarrage de l'app (`flushPendingSessions`, appelé avant le chargement du
+  workout suivant). Aucune perte de résultats réels en cas de coupure réseau.
