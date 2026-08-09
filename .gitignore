@@ -12,3 +12,8 @@ web/dataset/
 # divers
 *.log
 .DS_Store
+
+# outillage local des agents IA
+.agents/
+.aionrs/
+.claude/
