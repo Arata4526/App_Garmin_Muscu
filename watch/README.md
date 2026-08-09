@@ -58,40 +58,74 @@ Pour pointer sur l'API réelle : `useMock = false`, renseigner `apiBaseUrl`, `to
 
 ---
 
-## Prérequis (SDK non installé sur cette machine)
+## Installation du SDK (headless, sans le GUI officiel)
 
-⚠️ La machine de dev actuelle n'a **ni le SDK Connect IQ, ni `monkeyc`, ni Java** :
-le build/simulateur n'a donc **pas** pu être lancé ici. Étapes pour builder :
+Le **SDK Manager officiel** (GUI Electron/WebKit) plante sur certaines distributions
+Linux récentes (Ubuntu 24.10+/25.10) : `libwebkit2gtk-4.0.so.37` n'existe plus dans les
+dépôts, et même en réparant les libs manquantes une par une le process finit par crasher
+(`WebKitNetworkProcess` introuvable, conflit glib). **Solution qui fonctionne** : l'outil
+tiers open-source [`connect-iq-sdk-manager-cli`](https://github.com/lindell/connect-iq-sdk-manager-cli)
+(Go, zéro dépendance GTK/WebKit).
 
-1. **Java 17+** (`sudo apt install openjdk-17-jdk`).
-2. **Connect IQ SDK Manager** : https://developer.garmin.com/connect-iq/sdk/
-   → installer le SDK récent + le **device vivoactive3**.
-3. Ajouter les binaires du SDK au `PATH` (`.../connectiq-sdk-*/bin`) :
-   `monkeyc`, `monkeydo`, `connectiq`, `simulator`.
-4. Générer une **clé de développeur** (une fois) :
-   ```
-   openssl genrsa -out developer_key.pem 4096
-   openssl pkcs8 -topk8 -inform PEM -outform DER -in developer_key.pem \
-     -out developer_key.der -nocrypt
-   ```
-   Le plus simple : **VS Code + extension « Monkey C »** (Ctrl+Shift+P ▸
-   *Monkey C: Generate a Developer Key*), qui gère aussi build/run.
+```bash
+# 1. Installer le CLI (binaire release, ex. Linux x86_64) dans un dossier utilisateur
+curl -sL -o ciqcli.tar.gz \
+  "https://github.com/lindell/connect-iq-sdk-manager-cli/releases/download/v0.8.4/connect-iq-sdk-manager-cli_0.8.4_Linux_x86_64.tar.gz"
+mkdir -p ~/tools/bin && tar xzf ciqcli.tar.gz -C ~/tools/bin
+chmod +x ~/tools/bin/connect-iq-sdk-manager
+export PATH="$HOME/tools/bin:$PATH"
+
+# 2. Accepter la licence CIQ (une fois)
+connect-iq-sdk-manager agreement view      # affiche le hash courant
+connect-iq-sdk-manager agreement accept --agreement-hash=<HASH_AFFICHE>
+
+# 3. Login (flow OAuth via VOTRE navigateur habituel, pas de mot de passe en CLI)
+connect-iq-sdk-manager login
+# -> affiche "Please login at: http://localhost:PORT/login"
+#    Ouvrir ce lien dans Firefox/Chrome, se connecter avec le compte Garmin.
+
+# 4. Télécharger le SDK (le plus récent servi par Garmin) et le device vivoactive3
+connect-iq-sdk-manager sdk set ">=0.0.0"
+connect-iq-sdk-manager device download -d vivoactive3
+export PATH="$(connect-iq-sdk-manager sdk current-path --bin):$PATH"
+
+# 5. Clé développeur (une fois, jamais commitée — voir .gitignore)
+mkdir -p keys
+openssl genrsa -out keys/developer_key.pem 4096
+openssl pkcs8 -topk8 -inform PEM -outform DER -nocrypt \
+  -in keys/developer_key.pem -out keys/developer_key.der
+```
+
+⚠️ Java 17+ est requis par le SDK (`monkeyc` est un outil Java). Si absent :
+installer un JDK portable (ex. Temurin, sans sudo) et l'ajouter au `PATH`
+(`JAVA_HOME=/chemin/jdk-17.../ ; PATH="$JAVA_HOME/bin:$PATH"`).
+
+⚠️ Le **simulateur** (`bin/simulator`) utilise aussi WebKit et peut buter sur la même
+lib manquante (`libwebkit2gtk-4.0.so.37`). Contournement sans sudo qui fonctionne : si
+un runtime snap GNOME 42 (ou équivalent Ubuntu ~22.04) est présent sur la machine, pointer
+`LD_LIBRARY_PATH` dessus avant de lancer le simulateur :
+```bash
+export LD_LIBRARY_PATH="/snap/gnome-42-2204/<rev>/usr/lib/x86_64-linux-gnu"
+```
+(Sinon, extraire manuellement `libwebkit2gtk-4.0-37` + `libjavascriptcoregtk-4.0-18` +
+`libicu70` + `libunistring.so.2` depuis des paquets `.deb` Ubuntu 22.04 avec `dpkg-deb -x`,
+sans les installer.)
 
 ---
 
 ## Build & test dans le simulateur
 
-Depuis `watch/` :
+Depuis `watch/`, une fois le PATH configuré (Java + SDK bin, cf. ci-dessus) :
 
 ```bash
 # 1. Compiler pour la vivoactive3
-monkeyc -f monkey.jungle -o bin/Muscu.prg -y /chemin/developer_key.der -d vivoactive3
+monkeyc -f monkey.jungle -d vivoactive3 -o bin/muscu.prg -y keys/developer_key.der
 
-# 2. Démarrer le simulateur (dans un terminal séparé)
-connectiq            # ou: simulator
+# 2. Démarrer le simulateur (processus séparé, garder ouvert)
+simulator &
 
-# 3. Charger le .prg dans le simulateur
-monkeydo bin/Muscu.prg vivoactive3
+# 3. Charger le .prg dans le simulateur déjà lancé
+monkeydo bin/muscu.prg vivoactive3
 ```
 
 Sous **VS Code** : `F5` (Run) → sélectionner *vivoactive3* → build + simulateur
@@ -107,6 +141,40 @@ automatiques. **File ▸ Edit Application.Properties** pour changer les settings
   en mode mock : `MOCK POST /api/sessions : {...}`).
 
 Console de debug : `System.println(...)` s'affiche dans l'onglet de sortie du sim.
+
+---
+
+## ⚠️ Blocage connu : simulateur vivoactive3 instable (SDK 8.4.1 et 9.2.0)
+
+Le build **compile et link correctement** pour `vivoactive3` (`BUILD SUCCESSFUL`), mais
+le **simulateur crashe au runtime** dès l'écran de chargement, sur des symboles pourtant
+documentés et anciens (`Graphics.FONT_MEDIUM`/`FONT_SMALL`/`FONT_SYSTEM_SMALL` → *"Invalid
+Font Specified"* sur `dc.drawText`, et `Activity.SPORT_GENERIC`/`SPORT_TRAINING` → *"Could
+not find symbol"* sur `ActivityRecording.createSession`).
+
+**Diagnostic effectué** (pour ne pas reproduire le travail) :
+- Reproductible sur les **deux** versions de SDK actuellement servies par Garmin (9.2.0 et
+  8.4.1 — ce sont les seules disponibles, les zips SDK antérieurs à 8.x ne sont plus
+  hébergés, 404 confirmé).
+- Le device vivoactive3 a été **re-téléchargé** (hash identique, download stable).
+- **Le même code, compilé avec le même SDK, tourne sans aucune erreur sur `vivoactive5`**
+  (testé en build + simulateur) : le bug n'est donc pas dans notre code Monkey C, il est
+  spécifique au **profil device vivoactive3** tel que servi actuellement par Garmin.
+- Hypothèse la plus probable : vivoactive3 est un device 2017 dont le profil de simulation
+  n'est plus correctement régénéré/testé par Garmin contre les SDK récents (9.x/8.x) —
+  possible bug côté Garmin, pas forcément présent sur le firmware d'une vraie montre.
+
+**Pistes non testées faute de temps / accès** :
+- Sideload du `.prg` sur une **vraie Vivoactive 3** physique (le firmware réel pourrait
+  ne pas avoir ce bug, contrairement au profil de simulation).
+- SDK Manager **officiel GUI** (si Alexis parvient à le faire tourner) pourrait servir un
+  device vivoactive3 différent/plus à jour que celui du CLI tiers (peu probable vu que le
+  hash de téléchargement est stable, mais non exclu).
+- Forums développeurs Garmin (bug potentiellement déjà rapporté pour ce device).
+
+`bin/muscu.prg` est buildé et prêt ; le spike ergonomique 1-bouton (onBack) est implémenté
+et validé par lecture de code + fonctionnement confirmé sur vivoactive5, mais **pas encore
+validé visuellement en interaction sur vivoactive3** à cause de ce blocage.
 
 ---
 

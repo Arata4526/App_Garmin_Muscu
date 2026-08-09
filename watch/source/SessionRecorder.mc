@@ -23,6 +23,12 @@ class SessionRecorder {
         // (decalage doc API vs profil figé du device). SPORT_GENERIC +
         // SUB_SPORT_STRENGTH_TRAINING est la combinaison qui fonctionne et
         // reste classee "Musculation" dans Garmin Connect via le sous-sport.
+        // NOTE (voir README > Blocage simulateur vivoactive3) : ces enums
+        // Activity.Sport/SubSport sont documentees, compilent, et fonctionnent
+        // sur d'autres devices (teste OK sur vivoactive5) mais font planter le
+        // SIMULATEUR sur le profil device vivoactive3 actuellement servi par
+        // Garmin (toutes SDK versions disponibles testees). A garder tel quel :
+        // c'est le comportement correct pour le hardware reel / Garmin Connect.
         _session = ActivityRecording.createSession({
             :name => name,
             :sport => Activity.SPORT_GENERIC,
