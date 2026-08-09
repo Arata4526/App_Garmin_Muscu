@@ -164,29 +164,109 @@ not find symbol"* sur `ActivityRecording.createSession`).
   n'est plus correctement régénéré/testé par Garmin contre les SDK récents (9.x/8.x) —
   possible bug côté Garmin, pas forcément présent sur le firmware d'une vraie montre.
 
-**Pistes non testées faute de temps / accès** :
-- Sideload du `.prg` sur une **vraie Vivoactive 3** physique (le firmware réel pourrait
-  ne pas avoir ce bug, contrairement au profil de simulation).
-- SDK Manager **officiel GUI** (si Alexis parvient à le faire tourner) pourrait servir un
-  device vivoactive3 différent/plus à jour que celui du CLI tiers (peu probable vu que le
-  hash de téléchargement est stable, mais non exclu).
-- Forums développeurs Garmin (bug potentiellement déjà rapporté pour ce device).
+**Confirmé** : bug connu du **profil de simulation** vivoactive3 côté SDK Garmin (device
+2017 dont le profil de simulateur n'est plus correctement régénéré/testé contre les SDK
+récents — cf. forums développeurs Garmin). Ce type de bug affecte le simulateur, **pas en
+général le firmware réel** de la montre. Le code est validé par lecture + par
+fonctionnement confirmé sans erreur sur `vivoactive5` avec le même SDK et le même code.
 
-`bin/muscu.prg` est buildé et prêt ; le spike ergonomique 1-bouton (onBack) est implémenté
-et validé par lecture de code + fonctionnement confirmé sur vivoactive5, mais **pas encore
-validé visuellement en interaction sur vivoactive3** à cause de ce blocage.
+→ **Validation définitive retenue : sideload sur la vraie Vivoactive 3 physique
+d'Alexis**, procédure ci-dessous. Ne pas perdre de temps à relancer le simulateur
+vivoactive3, il n'apportera rien de plus.
+
+`bin/muscu.prg` est buildé (mode *release*, `useMock = true` par défaut dans
+`resources/properties/properties.xml`) : le premier test sur la montre déroule donc une
+séance complète **sans dépendre de l'API ni du téléphone** (workout mock "Push A", repos
+courts). C'est volontaire pour isoler la validation du flux/ergonomie (spike bouton
+physique + tactile) du reste de la chaîne réseau.
 
 ---
 
-## Sideload sur une vraie Vivoactive 3
+## Sideload sur une vraie Vivoactive 3 (validation matériel réel)
 
-1. Builder en mode *release* :
-   `monkeyc -f monkey.jungle -o bin/Muscu.prg -y developer_key.der -r -d vivoactive3`
-2. Brancher la montre en USB (mode stockage).
-3. Copier `bin/Muscu.prg` dans le dossier **`GARMIN/APPS/`** de la montre.
-4. Éjecter, l'app apparaît dans la liste des applications.
+### 1. Builder en mode release
 
-(La distribution finale passe par le **Connect IQ Store**.)
+Depuis `watch/`, PATH configuré (Java + SDK bin) :
+```bash
+monkeyc -f monkey.jungle -d vivoactive3 -o bin/muscu.prg -y keys/developer_key.der -r
+```
+(`-r` = mode release, requis pour tourner sur une vraie montre — le mode debug par défaut
+de `monkeyc` ne fonctionne qu'avec le simulateur/débogueur attaché.)
+
+### 2. Brancher la montre en USB
+
+Appairer le câble USB fourni avec la VA3. La montre affiche "USB connecté" et se monte
+comme un **volume de stockage de masse**, pas besoin de driver particulier sous Linux.
+
+Sous Linux (udisks/gvfs, environnement de bureau standard), le point de montage typique
+est :
+```
+/media/$USER/GARMIN/
+```
+ou, selon l'environnement (GNOME via gvfs) :
+```
+/run/user/$(id -u)/gvfs/mtp:host=.../  (si montée en MTP plutôt qu'en stockage de masse)
+```
+Si aucun des deux n'apparaît automatiquement, lister les volumes montés :
+```bash
+lsblk -f          # repérer le volume "GARMIN" (souvent vfat/FAT32)
+ls /media/$USER/  # ou ~/media selon la distro
+```
+
+### 3. Copier le `.prg`
+
+Le dossier applications sur la montre est **`GARMIN/APPS/`** à la racine du volume
+(certains firmwares utilisent `GARMIN/Apps/`, la casse ne compte généralement pas sous
+FAT32) :
+```bash
+cp bin/muscu.prg /media/$USER/GARMIN/GARMIN/APPS/
+# ou, si le point de montage n'a qu'un niveau GARMIN/ :
+cp bin/muscu.prg /media/$USER/GARMIN/APPS/
+```
+Vérifier le contenu du volume (`ls /media/$USER/GARMIN/`) si le chemin exact diffère —
+la structure interne varie légèrement selon le firmware.
+
+### 4. Éjecter proprement
+
+```bash
+sync
+udisksctl unmount -b /dev/sdXN   # ou clic droit "Éjecter" dans le gestionnaire de fichiers
+```
+Ne jamais débrancher sans éjecter : risque de corruption du volume.
+
+### 5. Lancer l'app sur la montre
+
+La montre redémarre son processus applicatif après éjection. L'app **Muscu** apparaît
+dans la liste des applications (bouton START/UP-DOWN pour naviguer, appui pour lancer,
+selon le menu habituel de la VA3). Elle démarre directement sur l'écran de chargement du
+workout mock.
+
+**À valider pendant ce test (spike ergonomique)** :
+- Le bouton physique latéral ne quitte plus l'app ni pendant une série ni pendant le
+  repos (fix `onBack()` — cf. section précédente).
+- Le gros bouton tactile "SÉRIE TERMINÉE" déclenche bien le repos automatique
+  (vibration + enchaînement à la série/exo suivant).
+- Le tap "PASSER" pendant le repos fonctionne, et le bouton physique bascule pause/reprise.
+- En fin de séance : l'activité doit apparaître dans **l'historique d'activités** de la
+  montre (type Musculation), et se synchroniser vers Garmin Connect au prochain contact
+  Bluetooth avec le téléphone.
+
+### Test en conditions réelles (API, hors mock)
+
+Pour ce test, `makeWebRequest` (`Toybox.Communications`) passe **exclusivement par le
+téléphone appairé** : la Vivoactive 3 n'a pas de connectivité IP directe, tout le trafic
+réseau de l'app transite en Bluetooth via **l'app Garmin Connect Mobile sur l'iPhone**, qui
+fait office de relais internet. Sans iPhone à portée avec Garmin Connect actif, `useMock =
+false` échouera systématiquement (pas de réseau).
+
+Autre contrainte : l'iOS de l'iPhone (WebKit/ATS) et le pipeline Garmin Connect exigent en
+pratique une URL **HTTPS avec certificat valide** pour `apiBaseUrl` — un `http://` brut
+(type `http://<ip-locale-du-pi>`) ne fonctionnera pas de façon fiable en conditions réelles.
+Il faudra donc exposer l'API du Raspberry Pi derrière un **reverse proxy HTTPS public**
+(certificat valide, ex. Let's Encrypt) avant de basculer `useMock = false` /
+`apiBaseUrl` sur l'URL réelle dans les App Settings.
+
+(La distribution finale, hors phase de dev, passe par le **Connect IQ Store**.)
 
 ---
 
