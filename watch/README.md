@@ -144,41 +144,68 @@ Console de debug : `System.println(...)` s'affiche dans l'onglet de sortie du si
 
 ---
 
-## ⚠️ Blocage connu : simulateur vivoactive3 instable (SDK 8.4.1 et 9.2.0)
+## ⚠️ Incompatibilités d'API réelles avec vivoactive3
 
-Le build **compile et link correctement** pour `vivoactive3` (`BUILD SUCCESSFUL`), mais
-le **simulateur crashe au runtime** dès l'écran de chargement, sur des symboles pourtant
-documentés et anciens (`Graphics.FONT_MEDIUM`/`FONT_SMALL`/`FONT_SYSTEM_SMALL` → *"Invalid
-Font Specified"* sur `dc.drawText`, et `Activity.SPORT_GENERIC`/`SPORT_TRAINING` → *"Could
-not find symbol"* sur `ActivityRecording.createSession`).
+Le premier test sur la **vraie montre** d'Alexis a planté au lancement (écran "IQ!"). Ce
+crash reproduisait fidèlement dans le simulateur vivoactive3 : ce ne sont **pas** des bugs
+de profil de simulation, mais de **vraies incompatibilités d'API** avec le niveau
+supporté par la VA3, à corriger dans le code (ce qui a été fait pour la première, cf.
+ci-dessous).
 
-**Diagnostic effectué** (pour ne pas reproduire le travail) :
-- Reproductible sur les **deux** versions de SDK actuellement servies par Garmin (9.2.0 et
-  8.4.1 — ce sont les seules disponibles, les zips SDK antérieurs à 8.x ne sont plus
-  hébergés, 404 confirmé).
-- Le device vivoactive3 a été **re-téléchargé** (hash identique, download stable).
-- **Le même code, compilé avec le même SDK, tourne sans aucune erreur sur `vivoactive5`**
-  (testé en build + simulateur) : le bug n'est donc pas dans notre code Monkey C, il est
-  spécifique au **profil device vivoactive3** tel que servi actuellement par Garmin.
-- Hypothèse la plus probable : vivoactive3 est un device 2017 dont le profil de simulation
-  n'est plus correctement régénéré/testé par Garmin contre les SDK récents (9.x/8.x) —
-  possible bug côté Garmin, pas forcément présent sur le firmware d'une vraie montre.
+### 1. `ActivityRecording.createSession` — CORRIGÉ
 
-**Confirmé** : bug connu du **profil de simulation** vivoactive3 côté SDK Garmin (device
-2017 dont le profil de simulateur n'est plus correctement régénéré/testé contre les SDK
-récents — cf. forums développeurs Garmin). Ce type de bug affecte le simulateur, **pas en
-général le firmware réel** de la montre. Le code est validé par lecture + par
-fonctionnement confirmé sans erreur sur `vivoactive5` avec le même SDK et le même code.
+`Toybox.Activity.SPORT_GENERIC` / `SPORT_TRAINING` (module récent) ne sont **pas résolus
+au runtime sur vivoactive3** (→ *"Could not find symbol"*, crash immédiat). Cause : la VA3
+ne reconnaît que l'énumération **historique**, propre au module `Toybox.ActivityRecording`
+lui-même (`ActivityRecording.SPORT_*` / `SUB_SPORT_*`, dépréciée depuis "System 8" mais
+présente depuis l'API 1.0.0 — voir doc `Toybox.ActivityRecording`, section "Constant
+Summary Sport1/Sport2"). C'est un enum **différent** de `Activity.Sport` (même valeurs
+numériques pour certaines entrées comme `SPORT_GENERIC=0`, mais pas le même symbole/type).
 
-→ **Validation définitive retenue : sideload sur la vraie Vivoactive 3 physique
-d'Alexis**, procédure ci-dessous. Ne pas perdre de temps à relancer le simulateur
-vivoactive3, il n'apportera rien de plus.
+**Fix appliqué** (`SessionRecorder.mc`) : utilise `ActivityRecording.SPORT_TRAINING` /
+`ActivityRecording.SUB_SPORT_STRENGTH_TRAINING`, avec garde défensive
+(`ActivityRecording has :SPORT_TRAINING`) et repli sans `:sport`/`:subSport` si même cette
+énumération legacy venait à manquer sur un autre device — pour ne jamais crasher au
+démarrage pour un simple champ de classification.
 
-`bin/muscu.prg` est buildé (mode *release*, `useMock = true` par défaut dans
-`resources/properties/properties.xml`) : le premier test sur la montre déroule donc une
-séance complète **sans dépendre de l'API ni du téléphone** (workout mock "Push A", repos
-courts). C'est volontaire pour isoler la validation du flux/ergonomie (spike bouton
-physique + tactile) du reste de la chaîne réseau.
+Cette erreur survient **avant** le premier rendu d'écran dans le flux de l'app (elle est
+déclenchée par `onWorkoutLoaded` → `recorder.start()`, avant `showExercise()`) : c'est très
+probablement la cause **unique** du crash "IQ!" observé sur la vraie montre, puisque
+l'exécution ne pouvait pas aller plus loin.
+
+### 2. `dc.drawText(...)` — NON RÉSOLU, à valider sur le nouveau build hardware
+
+Investigation approfondie (simulateur, **confirmé fiable** — reproduit le crash matériel) :
+`dc.drawText(...)` avec **n'importe quelle** police (`FONT_MEDIUM`, `FONT_SMALL`,
+`FONT_SYSTEM_SMALL`, testées) crashe systématiquement sur vivoactive3 avec
+*"Invalid Font Specified" / "Failed invoking <symbol>"* — alors que `dc.fillCircle(...)`
+(sans police) fonctionne normalement. Reproduit :
+- Sur les 2 seules versions de SDK actuellement servies par Garmin (9.2.0 et 8.4.1).
+- Dans un **projet minimal isolé** d'une seule vue (`dc.drawText` + une police, rien
+  d'autre) — donc pas lié à la complexité de notre app.
+- Avec un entier brut castés en `Graphics.FontType` à la place de la constante nommée —
+  même résultat, donc pas un problème de résolution du *symbole nommé* spécifiquement.
+- Indépendant de `minApiLevel` (testé 1.2.0 et 3.0.0).
+
+Cause probable : dans ce SDK, `Graphics.FontType` est un typedef complexe
+(`WatchUi.FontResource or Graphics.FontDefinition or Graphics.FontReference or
+Graphics.VectorFont`, **pas** un simple entier) — le bytecode compilé pour `drawText`
+semble reposer sur un mécanisme de résolution de police que le firmware VA3 (device 2017)
+ne reconnaît pas. **Aucun contournement code trouvé malgré une investigation exhaustive.**
+
+**IMPORTANT** : comme le crash `ActivityRecording` (point 1) survient **avant** tout appel
+à `drawText` dans le flux réel de l'app, il est très probable qu'**Alexis n'ait jamais
+atteint ce second bug** lors du premier test hardware — le crash "IQ!" observé s'explique
+entièrement par le point 1. **Le nouveau build (avec le fix #1) doit être re-testé sur la
+montre en premier** : s'il tourne, ce point 2 ne bloque rien en pratique ; s'il replante,
+ce sera la confirmation que ce bug de police touche aussi le matériel réel, et il faudra
+soit chercher un contournement (ex. rendu via un `Drawable`/layout XML `WatchUi.Text`
+plutôt que `Dc.drawText` direct, piste non testée faute de temps), soit remonter aux
+forums développeurs Garmin / support.
+
+`bin/muscu.prg` est rebuildé (mode *release*, avec le fix #1, `useMock = true` par défaut
+dans `resources/properties/properties.xml`) : le test sur la montre déroule une séance
+complète **sans dépendre de l'API ni du téléphone** (workout mock "Push A", repos courts).
 
 ---
 

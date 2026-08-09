@@ -1,10 +1,18 @@
 using Toybox.ActivityRecording;
-using Toybox.Activity;
 using Toybox.Lang;
 using Toybox.System;
 
 // Enregistrement de l'activite au format FIT (type musculation / strength).
 // L'activite apparait dans Garmin Connect apres synchro de la montre.
+//
+// IMPORTANT (VA3 - confirme sur matériel reel) : Toybox.Activity.SPORT_* /
+// SUB_SPORT_* (module recent) n'est PAS resolu au runtime sur vivoactive3
+// -> "Could not find symbol" -> crash immediat au lancement (ecran "IQ!").
+// Toybox.ActivityRecording possede son PROPRE enum Sport/SubSport (deprecie
+// depuis "System 8" mais present depuis l'API 1.0.0) : c'est celui-ci que la
+// VA3 reconnait reellement. On l'utilise, avec garde defensive (`has`) et
+// repli sans sport/subSport si meme ca devait manquer, plutot que de risquer
+// un crash au demarrage pour un champ de classification secondaire.
 class SessionRecorder {
     private var _session as ActivityRecording.Session or Null;
 
@@ -18,22 +26,14 @@ class SessionRecorder {
 
     function start(name as Lang.String) as Void {
         if (!available() || _session != null) { return; }
-        // NOTE: Activity.SPORT_TRAINING est documente et compile, mais son
-        // symbole n'est pas resolu par le runtime simulateur vivoactive3
-        // (decalage doc API vs profil figé du device). SPORT_GENERIC +
-        // SUB_SPORT_STRENGTH_TRAINING est la combinaison qui fonctionne et
-        // reste classee "Musculation" dans Garmin Connect via le sous-sport.
-        // NOTE (voir README > Blocage simulateur vivoactive3) : ces enums
-        // Activity.Sport/SubSport sont documentees, compilent, et fonctionnent
-        // sur d'autres devices (teste OK sur vivoactive5) mais font planter le
-        // SIMULATEUR sur le profil device vivoactive3 actuellement servi par
-        // Garmin (toutes SDK versions disponibles testees). A garder tel quel :
-        // c'est le comportement correct pour le hardware reel / Garmin Connect.
-        _session = ActivityRecording.createSession({
-            :name => name,
-            :sport => Activity.SPORT_GENERIC,
-            :subSport => Activity.SUB_SPORT_STRENGTH_TRAINING
-        });
+
+        var options = { :name => name };
+        if ((ActivityRecording has :SPORT_TRAINING) && (ActivityRecording has :SUB_SPORT_STRENGTH_TRAINING)) {
+            options.put(:sport, ActivityRecording.SPORT_TRAINING);
+            options.put(:subSport, ActivityRecording.SUB_SPORT_STRENGTH_TRAINING);
+        }
+
+        _session = ActivityRecording.createSession(options);
         _session.start();
         System.println("FIT recording start");
     }
