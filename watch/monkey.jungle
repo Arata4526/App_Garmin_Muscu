@@ -1,0 +1,7 @@
+# Fichier de build Connect IQ (jungle).
+# Le SDK deduit les sources depuis source/ et les ressources depuis resources/.
+project.manifest = manifest.xml
+
+# Sources et ressources par defaut (toutes cibles).
+base.sourcePath = source
+base.resourcePath = resources

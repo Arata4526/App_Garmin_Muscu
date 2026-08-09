@@ -1,0 +1,9 @@
+<properties>
+    <!-- Valeurs par defaut des App Settings. Modifiables dans le simulateur:
+         File > Edit Application.Properties, ou via Garmin Connect Mobile sur la montre. -->
+    <property id="apiBaseUrl" type="string">https://muscu.alexisbousquet.fr</property>
+    <property id="token" type="string"></property>
+    <property id="workoutId" type="string">1</property>
+    <!-- true = ignore l'API et charge le mock local (utile tant que l'API n'est pas prete) -->
+    <property id="useMock" type="boolean">true</property>
+</properties>

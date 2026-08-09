@@ -1,0 +1,14 @@
+services:
+  app:
+    build: .
+    container_name: muscu-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Token Bearer partagé avec l'app montre et le front — à définir dans web/.env
+      API_TOKEN: ${API_TOKEN:?Définir API_TOKEN dans un fichier .env à côté de docker-compose.yml}
+      PORT: 3000
+    volumes:
+      - ./data:/app/data          # base SQLite persistée
+      - ./dataset:/app/dataset:ro # catalogue exos (images + GIF), monté en lecture seule

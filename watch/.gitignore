@@ -1,0 +1,13 @@
+# Build Connect IQ
+bin/
+*.prg
+*.prg.debug.xml
+*.iq
+
+# Cles developpeur (ne jamais committer)
+*.der
+*.pem
+developer_key*
+
+# Divers
+.DS_Store

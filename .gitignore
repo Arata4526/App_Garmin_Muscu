@@ -1,0 +1,14 @@
+# deps & builds
+node_modules/
+dist/
+
+# données locales
+web/data/
+web/dataset/
+
+# secrets
+.env
+
+# divers
+*.log
+.DS_Store
